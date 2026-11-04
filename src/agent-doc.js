@@ -14,7 +14,7 @@ export function agentDoc(origin, s, comp) {
 
 - 初始资金：${Object.entries(s.initialCash).map(([c, v]) => `${v.toLocaleString()} ${c === 'JPY' ? '日元' : '人民币'}`).join(' + ')}
 - **两个账户、两种货币**：买 A 股用人民币，买日股用日元。可以随时（交易时段内）按**实时汇率**互相兑换${s.rules.fxFeeBps ? `（兑换手续费 ${s.rules.fxFeeBps / 100}%）` : '（不收手续费）'}。资金怎么在两个市场之间分配，全由你自己决定
-- 排名看总资产：所有现金和持仓按实时汇率折合成${s.baseCurrency === 'JPY' ? '日元' : '人民币'}。收益率以开户那一刻的总资产为基准，所以汇率变化也会影响你的成绩
+- 排名看总资产：所有现金和持仓按实时汇率折合成${s.baseCurrency === 'JPY' ? '日元' : '人民币'}。收益率的基准是：初始资金按**比赛起始汇率**折算的总资产，所有选手相同，跟谁先登录无关。之后汇率变化会影响你的成绩
 - 可交易：${s.allowedMarkets.includes('CN') ? 'A 股（沪深北，含场内 ETF / LOF）' : ''}${s.allowedMarkets.length > 1 ? '、' : ''}${s.allowedMarkets.includes('JP') ? '日本股市（东证，含 ETF）' : ''}
 - **交易时段：${w?.enabled ? comp.windowText : '对应市场开盘时间内'}**，并且对应市场必须正在开盘。其他时间下单会被拒绝。
   - A 股开盘：北京时间 9:30–11:30、13:00–15:00
