@@ -126,12 +126,13 @@ export class Arena extends DurableObject {
   // ---------------- 汇率 ----------------
   /** 返回每种货币折合计价货币的汇率，例如 { CNY: 1, JPY: 0.0471 }（计价货币为人民币时） */
   async rates() {
-    let jpycny = null;
+    let jpycny = null; // 1 日元 = ? 人民币
     let source = 'fallback';
     if (this.settings.fxLive) {
-      const q = (await this.quotes.get(['fxJPYCNY'])).fxJPYCNY;
+      // 用“人民币兑日元”（约 21~24，有效数字多）再取倒数，比直接取“日元兑人民币”（只给到 0.042）精确得多
+      const q = (await this.quotes.get(['fxCNYJPY'])).fxCNYJPY;
       if (q?.price > 0 && q.ageSec < 3600) {
-        jpycny = q.price;
+        jpycny = 1 / q.price;
         source = 'live';
         this.setMeta('lastFx', String(jpycny));
       } else if (Number(this.getMeta('lastFx')) > 0) {

@@ -134,7 +134,7 @@ async function tencentQuotes(symbols) {
   return out;
 }
 
-/** 汇率“代码”：fxJPYCNY = 1 日元值多少人民币（来自 Yahoo Finance） */
+/** 汇率“代码”：fxCNYJPY = 1 人民币值多少日元（来自 Yahoo Finance 的 CNYJPY=X） */
 export function isFx(sym) {
   return /^fx[A-Z]{6}$/.test(sym);
 }
@@ -188,7 +188,7 @@ function mockQuotes(symbols) {
     if (!st) {
       let h = 0;
       for (const c of sym) h = (h * 31 + c.charCodeAt(0)) >>> 0;
-      const base = isFx(sym) ? 0.047 : 10 + (h % 2000) / 4;
+      const base = sym === 'fxCNYJPY' ? 21.3 : isFx(sym) ? 0.047 : 10 + (h % 2000) / 4;
       st = { prevClose: base, price: base };
       mockState.set(sym, st);
     }

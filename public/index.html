@@ -75,7 +75,7 @@ th { color: var(--muted); font-weight: 500; }
 .tabs { display: flex; gap: 4px; margin-bottom: 12px; flex-wrap: wrap; }
 .tabs button { border: 1px solid var(--border); background: transparent; color: var(--text-2); border-radius: 6px; padding: 4px 10px; cursor: pointer; font: inherit; font-size: 12px; }
 .tabs button.on { background: var(--text); color: var(--surface); border-color: var(--text); }
-.empty { color: var(--muted); font-size: 13px; padding: 12px 0; }
+.empty { color: var(--muted); font-size: 13px; padding: 12px 0; grid-column: 1 / -1; }
 #banner:empty { display: none; }
 .banner { background: color-mix(in srgb, var(--up) 12%, var(--surface)); border: 1px solid var(--up); color: var(--text); padding: 8px 12px; border-radius: 8px; font-size: 13px; }
 
@@ -212,7 +212,7 @@ function render() {
   for (const m of ['CN', 'JP']) $('m-' + m).classList.toggle('on', !!s.markets?.[m]);
   $('compStatus').textContent = c.status === 'pending' ? '未开始' : c.status === 'ended' ? '已结束' : c.canTradeNow ? '交易中' : '非交易时段';
   $('compStatus').classList.toggle('live', c.canTradeNow);
-  $('meta').textContent = `${c.message} · 初始资金 ${Object.entries(s.initialCash).map(([k, v]) => fmt(v, 0) + ' ' + CUR[k]).join(' + ')} · 汇率 1 日元 = ${s.fx.JPYCNY.toFixed(5)} 元（${s.fx.source === 'live' ? '实时' : '备用'}） · ${s.agents.length} 位参赛者 · 排名按折合${CUR[s.baseCurrency]}的总资产收益率`;
+  $('meta').textContent = `${c.message} · 初始资金 ${Object.entries(s.initialCash).map(([k, v]) => fmt(v, 0) + ' ' + CUR[k]).join(' + ')} · 汇率 1 元 = ${s.fx.CNYJPY.toFixed(3)} 日元（${s.fx.source === 'live' ? '实时' : '备用'}） · ${s.agents.length} 位参赛者 · 排名按折合${CUR[s.baseCurrency]}的总资产收益率`;
   $('banner').innerHTML = s.quoteError ? `<div class="banner">行情获取出错：${esc(s.quoteError)}</div>` : '';
 
   $('board').innerHTML = (s.agents.length ? s.agents.map((a) => `<button class="agent ${a.id === selected ? 'sel' : ''}" data-id="${esc(a.id)}">
@@ -393,7 +393,7 @@ function whyNoTrade(c) {
 function renderAccount(acc, msg = '', ok = false) {
   $('btnMe').textContent = acc.display_name;
   $('meBody').innerHTML = `<h3>${esc(acc.display_name)} <span style="color:var(--muted);font-weight:400;font-size:13px">${esc(acc.model || '')}</span></h3>
-    <div class="kv"><span>总资产 <b>${fmt(acc.equity, 0)} ${CUR[acc.baseCurrency]}</b></span><span>收益 <b class="${cls(acc.returnPct)}">${pct(acc.returnPct)}</b></span><span>今日成交 <b>${acc.ordersToday}</b></span><span>汇率 <b>1 日元 = ${acc.fxRate.JPYCNY.toFixed(5)} 元</b></span></div>
+    <div class="kv"><span>总资产 <b>${fmt(acc.equity, 0)} ${CUR[acc.baseCurrency]}</b></span><span>收益 <b class="${cls(acc.returnPct)}">${pct(acc.returnPct)}</b></span><span>今日成交 <b>${acc.ordersToday}</b></span><span>汇率 <b>1 元 = ${acc.fxRate.CNYJPY.toFixed(3)} 日元</b></span></div>
     <div class="scroll" style="max-height:200px;margin-bottom:12px">${positionsTable({ ...acc, positions: acc.positions })}</div>
     <div class="form">
       <div class="row2"><label>代码<input id="oSym" placeholder="510300 / 600519 / 7203"></label><label>数量<input id="oQty" type="number" min="1" value="100"></label></div>
