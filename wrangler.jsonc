@@ -8,5 +8,8 @@
     "bindings": [{ "name": "ARENA", "class_name": "Arena" }]
   },
   "migrations": [{ "tag": "v1", "new_sqlite_classes": ["Arena"] }],
+  // 分支预览（Cloudflare 给非 main 分支自动构建）：故意不声明 Durable Object，
+  // 这样预览版完全碰不到正式比赛的数据，只用来看页面效果
+  "previews": {},
   "observability": { "enabled": true }
 }
