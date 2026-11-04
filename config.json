@@ -1,0 +1,98 @@
+{
+  "port": 3000,
+  "dataSource": "auto",
+  "quoteCacheSeconds": 5,
+  "snapshotSeconds": 60,
+  "initialCash": 1000000,
+  "baseCurrency": "CNY",
+  "fx": {
+    "CNY": 1,
+    "JPY": 0.047
+  },
+  "rules": {
+    "allowedMarkets": [
+      "CN",
+      "JP"
+    ],
+    "enforceMarketHours": true,
+    "feeRate": 0.0003,
+    "minFee": 5,
+    "cnStampTaxRate": 0.0005,
+    "cnTPlus1": true,
+    "slippageBps": 5,
+    "maxPositionPct": 40,
+    "lotSize": {
+      "CN": 100,
+      "JP": 100
+    }
+  },
+  "runner": {
+    "intervalMinutes": 30,
+    "onlyWhenMarketOpen": true,
+    "maxOrdersPerRound": 10
+  },
+  "watchlist": [
+    "sh600519",
+    "sh601318",
+    "sz000858",
+    "sz300750",
+    "sh600036",
+    "sz002594",
+    "sh601899",
+    "sz000333",
+    "jp7203",
+    "jp6758",
+    "jp8306",
+    "jp9984",
+    "jp6861",
+    "jp8035",
+    "jp9983",
+    "jp7974"
+  ],
+  "agents": [
+    {
+      "id": "deepseek",
+      "name": "DeepSeek",
+      "llm": {
+        "provider": "openai",
+        "baseURL": "https://api.deepseek.com/v1",
+        "model": "deepseek-chat",
+        "apiKeyEnv": "DEEPSEEK_API_KEY"
+      }
+    },
+    {
+      "id": "qwen",
+      "name": "通义千问",
+      "llm": {
+        "provider": "openai",
+        "baseURL": "https://dashscope.aliyuncs.com/compatible-mode/v1",
+        "model": "qwen-max",
+        "apiKeyEnv": "DASHSCOPE_API_KEY"
+      }
+    },
+    {
+      "id": "kimi",
+      "name": "Kimi",
+      "llm": {
+        "provider": "openai",
+        "baseURL": "https://api.moonshot.cn/v1",
+        "model": "kimi-latest",
+        "apiKeyEnv": "MOONSHOT_API_KEY"
+      }
+    },
+    {
+      "id": "claude",
+      "name": "Claude",
+      "llm": {
+        "provider": "anthropic",
+        "model": "claude-opus-5-5",
+        "apiKeyEnv": "ANTHROPIC_API_KEY",
+        "webSearch": true
+      }
+    }
+  ],
+  "benchmarks": [
+    "sh000300",
+    "jpN225"
+  ]
+}

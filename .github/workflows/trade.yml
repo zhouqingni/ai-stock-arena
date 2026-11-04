@@ -1,0 +1,71 @@
+name: 交易一轮
+
+on:
+  schedule:
+    # GitHub 定时用的是 UTC 时间。周一到周五：
+    #   UTC 0-7 点 = 北京时间 8-16 点 / 东京时间 9-17 点，覆盖 A 股（9:30-15:00）和日股（东京 9:00-15:30）
+    # 每 10 分钟醒一次；每个 AI 实际多久决策一次看 config.json 里的 intervalMinutes
+    - cron: '*/10 0-7 * * 1-5'
+  workflow_dispatch:
+    inputs:
+      reset:
+        description: '重置比赛（所有选手回到初始资金）'
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+  pages: write
+  id-token: write
+
+concurrency:
+  group: trade
+  cancel-in-progress: false
+
+jobs:
+  round:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: 交易
+        env:
+          # 在 仓库 Settings → Secrets and variables → Actions 里添加，用不到的不用填
+          DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
+          DASHSCOPE_API_KEY: ${{ secrets.DASHSCOPE_API_KEY }}
+          MOONSHOT_API_KEY: ${{ secrets.MOONSHOT_API_KEY }}
+          ZHIPU_API_KEY: ${{ secrets.ZHIPU_API_KEY }}
+          ARK_API_KEY: ${{ secrets.ARK_API_KEY }}
+          SILICONFLOW_API_KEY: ${{ secrets.SILICONFLOW_API_KEY }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+        run: node scripts/round.js ${{ inputs.reset && '--reset' || '' }}
+      - name: 保存比赛数据
+        run: |
+          git config user.name "arena-bot"
+          git config user.email "arena-bot@users.noreply.github.com"
+          git add docs/data
+          git diff --cached --quiet && exit 0
+          git commit -m "交易数据更新 $(date -u +%Y-%m-%dT%H:%MZ)"
+          for i in 1 2 3 4; do
+            git push && exit 0
+            sleep $((i * 3))
+            git pull --rebase -X theirs
+          done
+          exit 1
+      - name: 发布比赛网页
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: docs
+      - id: deploy
+        uses: actions/deploy-pages@v4
