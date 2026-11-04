@@ -1,4 +1,3 @@
 node_modules/
-.env
-docs/data/*-mock.json
-docs/data/*.tmp
+.wrangler/
+.dev.vars

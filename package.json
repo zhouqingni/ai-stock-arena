@@ -1,15 +1,15 @@
 {
   "name": "ai-stock-arena",
-  "version": "1.0.0",
-  "description": "多个 AI 用虚拟资金、实时行情比赛炒股",
+  "version": "2.0.0",
+  "description": "AI 模拟炒股比赛网站：agent 自己注册登录，用真实行情交易（A 股 + 日股 + 场内 ETF）",
+  "private": true,
   "type": "module",
-  "main": "server.js",
   "scripts": {
-    "start": "node server.js",
-    "mock": "node server.js --mock"
+    "dev": "wrangler dev",
+    "mock": "wrangler dev --var DATA_SOURCE:mock",
+    "deploy": "wrangler deploy"
   },
-  "engines": { "node": ">=18" },
-  "dependencies": {
-    "@anthropic-ai/sdk": "^1.4.0"
+  "devDependencies": {
+    "wrangler": "^4.40.0"
   }
 }

@@ -1,6 +1,6 @@
 // 行情模块：代码规范化、实时报价（腾讯 / Yahoo / 模拟）、交易时段判断
 // 比赛市场：A 股（沪深北）+ 日本股市（东京证券交易所）
-// 统一代码格式：sh600519 / sz000001 / bj430047 / jp7203（丰田）/ 指数 sh000300、jpN225
+// 统一代码格式：sh600519 / sz000001 / bj430047 / ETF sh510300、sz159915 / jp7203（丰田）、jp1306（ETF）/ 指数 sh000300、jpN225
 
 const MARKETS = {
   CN: { currency: 'CNY', tz: 'Asia/Shanghai', sessions: [[9 * 60 + 30, 11 * 60 + 30], [13 * 60, 15 * 60]] },
@@ -42,12 +42,17 @@ export function currencyOf(sym) {
 
 export const MARKET_NAMES = { CN: 'A股', JP: '日股' };
 
+/** 是否是场内基金（ETF / LOF）：沪 51/56/58、深 15/16 开头；日本 1300-1699 段 */
+export function isFund(sym) {
+  return /^sh5[168]\d{4}$/.test(sym) || /^sz1[56]\d{4}$/.test(sym) || /^jp1[3-6]\d{2}$/.test(sym);
+}
+
 /** 是否是指数（只能看不能买） */
 export function isIndex(sym) {
   return /^sh000\d{3}$/.test(sym) || /^sz399\d{3}$/.test(sym) || sym === 'jpN225' || sym === 'jpTOPX';
 }
 
-function localParts(tz, now = new Date()) {
+export function localParts(tz, now = new Date()) {
   const f = new Intl.DateTimeFormat('en-US', {
     timeZone: tz, weekday: 'short', hour: '2-digit', minute: '2-digit', hour12: false,
     year: 'numeric', month: '2-digit', day: '2-digit',
@@ -129,7 +134,13 @@ async function tencentQuotes(symbols) {
   return out;
 }
 
+/** 汇率“代码”：fxJPYCNY = 1 日元值多少人民币（来自 Yahoo Finance） */
+export function isFx(sym) {
+  return /^fx[A-Z]{6}$/.test(sym);
+}
+
 function toYahoo(sym) {
+  if (isFx(sym)) return sym.slice(2) + '=X';
   if (sym === 'jpN225') return '^N225';
   if (sym === 'jpTOPX') return '^TOPX';
   if (sym.startsWith('jp')) return sym.slice(2) + '.T';
@@ -177,17 +188,17 @@ function mockQuotes(symbols) {
     if (!st) {
       let h = 0;
       for (const c of sym) h = (h * 31 + c.charCodeAt(0)) >>> 0;
-      const base = 10 + (h % 2000) / 4;
+      const base = isFx(sym) ? 0.047 : 10 + (h % 2000) / 4;
       st = { prevClose: base, price: base };
       mockState.set(sym, st);
     }
-    st.price = Math.max(0.5, st.price * (1 + (Math.random() - 0.5) * 0.006));
+    st.price = Math.max(isFx(sym) ? 0.0001 : 0.5, st.price * (1 + (Math.random() - 0.5) * 0.006));
     out[sym] = {
       symbol: sym,
       name: `模拟-${sym}`,
-      price: +st.price.toFixed(2),
-      prevClose: +st.prevClose.toFixed(2),
-      open: +st.prevClose.toFixed(2),
+      price: +st.price.toFixed(isFx(sym) ? 6 : 2),
+      prevClose: +st.prevClose.toFixed(isFx(sym) ? 6 : 2),
+      open: +st.prevClose.toFixed(isFx(sym) ? 6 : 2),
       high: null,
       low: null,
       change: +(st.price - st.prevClose).toFixed(2),
@@ -218,11 +229,11 @@ export class QuoteService {
         else if (this.source === 'yahoo') fresh = await yahooQuotes(stale);
         else {
           // auto：A 股走腾讯（实时），日股走 Yahoo
-          const cn = stale.filter((x) => marketOf(x) === 'CN');
-          const jp = stale.filter((x) => marketOf(x) === 'JP');
+          const cn = stale.filter((x) => marketOf(x) === 'CN' && !isFx(x));
+          const jp = stale.filter((x) => marketOf(x) === 'JP' || isFx(x));
           const [a, b] = await Promise.all([cn.length ? tencentQuotes(cn) : {}, jp.length ? yahooQuotes(jp) : {}]);
           fresh = { ...a, ...b };
-          if (jp.length && !Object.keys(b).length) throw new Error('日股行情（Yahoo）获取失败');
+          if (jp.length && !Object.keys(b).length) throw new Error('日股 / 汇率行情（Yahoo）获取失败');
         }
         for (const [s, q] of Object.entries(fresh)) this.cache.set(s, { quote: q, at: now });
         this.lastError = null;
