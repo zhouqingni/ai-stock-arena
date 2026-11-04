@@ -79,6 +79,7 @@ export class Arena extends DurableObject {
       this.migrate();
       this.settings = this.loadSettings();
       this.quotes = new QuoteService({ source: env.DATA_SOURCE || this.settings.dataSource, cacheSeconds: 5 });
+      if (!this.getMeta('baseRates')) await this.setBaseRates(await this.rates()); // 旧数据升级：补上统一的起始汇率
       if (!(await ctx.storage.getAlarm())) await ctx.storage.setAlarm(Date.now() + 60_000);
     });
   }
@@ -204,11 +205,26 @@ export class Arena extends DurableObject {
   initialBase(rates) {
     return Object.entries(this.settings.initialCash).reduce((s, [c, v]) => s + v * (rates[c] ?? 0), 0);
   }
-  /** 开户 / 重置：发放初始资金，并按当时汇率记下初始总资产（收益率的基准） */
-  fundAccount(userId, rates) {
+  /**
+   * 比赛起始汇率：所有人的初始资金都按这一个汇率折算，作为收益率的基准。
+   * 这样谁先登录、谁后登录都一样，之后汇率涨跌对所有人的影响也一样。
+   * 在比赛重置时重新确定；设置时把已开户的人的基准一起改掉。
+   */
+  baseRates() {
+    return JSON.parse(this.getMeta('baseRates'));
+  }
+  async setBaseRates(rates) {
+    const fixed = Object.fromEntries(CURRENCIES.map((c) => [c, rates[c]]));
+    this.setMeta('baseRates', JSON.stringify(fixed));
+    const base = round2(this.initialBase(fixed));
+    this.sql.exec('UPDATE users SET initial_base = ? WHERE activated_at IS NOT NULL', base);
+  }
+
+  /** 开户 / 重置：发放初始资金，基准总资产按比赛起始汇率折算（人人相同） */
+  fundAccount(userId) {
     this.sql.exec('DELETE FROM cash WHERE user_id = ?', userId);
     for (const [c, v] of Object.entries(this.settings.initialCash)) this.addCash(userId, c, v);
-    const base = round2(this.initialBase(rates));
+    const base = round2(this.initialBase(this.baseRates()));
     this.sql.exec('UPDATE users SET initial_base = ? WHERE id = ?', base, userId);
     this.sql.exec('INSERT INTO equity (user_id, t, v) VALUES (?, ?, ?)', userId, Date.now(), base);
   }
@@ -226,13 +242,9 @@ export class Arena extends DurableObject {
     if (!u) throw new HttpError(401, '邀请码不对');
     if (u.disabled) throw new HttpError(403, '这个邀请码已被主办方停用');
     if (!u.activated_at) {
-      const rates = await this.rates();
-      u = this.sql.exec('SELECT * FROM users WHERE id = ?', u.id).one(); // await 之后重新读，防止重复开户
-      if (!u.activated_at) {
-        this.sql.exec('UPDATE users SET activated_at = ? WHERE id = ?', nowIso(), u.id);
-        this.fundAccount(u.id, rates);
-        u = this.sql.exec('SELECT * FROM users WHERE id = ?', u.id).one();
-      }
+      this.sql.exec('UPDATE users SET activated_at = ? WHERE id = ?', nowIso(), u.id);
+      this.fundAccount(u.id);
+      u = this.sql.exec('SELECT * FROM users WHERE id = ?', u.id).one();
     }
     this.sql.exec('UPDATE users SET last_seen = ? WHERE id = ?', nowIso(), u.id);
     return u;
@@ -631,8 +643,10 @@ export class Arena extends DurableObject {
       this.sql.exec('DELETE FROM users');
     } else {
       // 邀请码保留；已经开户的人重新发初始资金，从现在开始重新记净值
-      for (const u of this.sql.exec('SELECT id FROM users WHERE activated_at IS NOT NULL').toArray()) this.fundAccount(u.id, rates);
+      await this.setBaseRates(rates);
+      for (const u of this.sql.exec('SELECT id FROM users WHERE activated_at IS NOT NULL').toArray()) this.fundAccount(u.id);
     }
+    if (mode === 'all') await this.setBaseRates(rates);
     this.setMeta('startedAt', nowIso());
     return { ok: true };
   }
