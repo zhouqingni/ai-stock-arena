@@ -77,6 +77,16 @@ th { color: var(--muted); font-weight: 500; }
 .tabs button.on { background: var(--text); color: var(--surface); border-color: var(--text); }
 .empty { color: var(--muted); font-size: 13px; padding: 12px 0; grid-column: 1 / -1; }
 #banner:empty { display: none; }
+.bars { display: grid; gap: 8px; margin: 4px 0 16px; }
+.bars:empty { display: none; }
+.bar-row { display: grid; grid-template-columns: minmax(80px, 160px) 1fr minmax(120px, auto); gap: 12px; align-items: center; font-size: 13px; }
+.bar-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text); }
+.bar-track { height: 18px; position: relative; }
+.bar-fill { height: 100%; border-radius: 0 4px 4px 0; min-width: 2px; }
+.bar-val { font-variant-numeric: tabular-nums; color: var(--text); white-space: nowrap; }
+.bar-val small { color: var(--muted); margin-left: 6px; }
+.bars-cap { font-size: 12px; color: var(--muted); margin-top: -8px; margin-bottom: 12px; }
+@media (max-width: 600px) { .bar-row { grid-template-columns: 72px 1fr; } .bar-val { grid-column: 2; } }
 .banner { background: color-mix(in srgb, var(--up) 12%, var(--surface)); border: 1px solid var(--up); color: var(--text); padding: 8px 12px; border-radius: 8px; font-size: 13px; }
 
 .hdr-right { margin-left: auto; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
@@ -127,6 +137,8 @@ textarea { font: 12px/1.5 ui-monospace, Menlo, Consolas, monospace; min-height: 
   <section class="card">
     <h2 data-i18n="hBoard"></h2>
     <div class="meta" id="meta" style="margin:-6px 0 12px"></div>
+    <div class="bars" id="bars" role="img"></div>
+    <div class="bars-cap" id="barsCap"></div>
     <div class="board" id="board"></div>
   </section>
   <section class="card">
@@ -206,6 +218,7 @@ const I18N = {
     ret: '收益', ordersToday: '今日成交', fxShort: (r) => `1 元 = ${r} 日元`, symbol: '代码', qty: '数量', reason: '理由（公开显示）',
     logout: '退出登录', sellBtn: '卖出', buyBtn: '买入', convert: '兑换', toJPY: '人民币 → 日元', toCNY: '日元 → 人民币', amountFrom: '金额（卖出的货币）', convertBtn: '兑换货币',
     converted: (a, b) => `已兑换：${a} → ${b}`, filled: (side, name, q, p) => `成交：${side} ${name} ×${q} @ ${p}`,
+    barsCap: (c) => `总资产（折合${c}）· 从多到少 · 括号里是相对起点的盈亏`, barsLabel: '各参赛者总资产对比',
     cur: { CNY: '元', JPY: '日元' }, locale: 'zh-CN',
   },
   en: {
@@ -234,6 +247,7 @@ const I18N = {
     ret: 'Return', ordersToday: 'Trades today', fxShort: (r) => `CN¥1 = ¥${r}`, symbol: 'Symbol', qty: 'Qty', reason: 'Reason (public)',
     logout: 'Log out', sellBtn: 'Sell', buyBtn: 'Buy', convert: 'Convert', toJPY: 'CNY → JPY', toCNY: 'JPY → CNY', amountFrom: 'Amount (currency you sell)', convertBtn: 'Convert currency',
     converted: (a, b) => `Converted: ${a} → ${b}`, filled: (side, name, q, p) => `Filled: ${side} ${name} ×${q} @ ${p}`,
+    barsCap: (c) => `Total assets (in ${c}) · highest first · gain/loss vs. start in brackets`, barsLabel: 'Total assets by player',
     cur: { CNY: 'CNY', JPY: 'JPY' }, locale: 'en-US',
   },
   ja: {
@@ -262,6 +276,7 @@ const I18N = {
     ret: 'リターン', ordersToday: '本日の約定', fxShort: (r) => `1 人民元 = ${r} 円`, symbol: 'コード', qty: '数量', reason: '理由（公開）',
     logout: 'ログアウト', sellBtn: '売る', buyBtn: '買う', convert: '両替', toJPY: '人民元 → 円', toCNY: '円 → 人民元', amountFrom: '金額（売る側の通貨）', convertBtn: '両替する',
     converted: (a, b) => `両替しました：${a} → ${b}`, filled: (side, name, q, p) => `約定：${side} ${name} ×${q} @ ${p}`,
+    barsCap: (c) => `総資産（${c}換算）・多い順・カッコ内は開始時からの損益`, barsLabel: '参加者ごとの総資産',
     cur: { CNY: '人民元', JPY: '円' }, locale: 'ja-JP',
   },
 };
@@ -361,6 +376,7 @@ function render() {
   document.querySelectorAll('.agent[data-id]').forEach((el) => el.onclick = () => { selected = el.dataset.id; store.set('sel', selected); render(); });
 
   $('prompt').textContent = promptFor(L.codePh, lang);
+  renderBars();
   renderDaily();
   drawChart();
   renderDetail();
@@ -394,6 +410,24 @@ When you are ready, log in, reply with your name and the key rules, then wait fo
 交易时段是 ${w}。在交易时段内，你可以自己查新闻和行情、自己决定买卖，并自己安排盯盘节奏（比如用 /loop 每 10 分钟看一次盘）；时段结束后就停止，等下一个交易日。每笔交易写清楚理由，重要的判断用笔记记下来。目标是比赛结束时总资产最高，同时控制回撤。
 
 准备好以后，先登录，然后回复我你的名字和比赛规则要点，再等交易时段开始。`;
+}
+
+/** 总资产柱状图：从 0 开始画（长度是真实比例），按资产从多到少 */
+function renderBars() {
+  const L = T(), list = [...state.agents].sort((a, b) => b.equity - a.equity);
+  if (!list.length) { $('bars').innerHTML = ''; $('barsCap').textContent = ''; return; }
+  const max = Math.max(...list.map((a) => a.equity), ...list.map((a) => a.initialBase || 0)) || 1;
+  const cur = CUR(state.baseCurrency);
+  $('bars').setAttribute('aria-label', L.barsLabel);
+  $('bars').innerHTML = list.map((a) => {
+    const diff = a.equity - (a.initialBase || a.equity);
+    return `<div class="bar-row" title="${esc(a.name)}: ${fmt(a.equity, 0)} ${cur}">
+      <span class="bar-name">${esc(a.name)}</span>
+      <span class="bar-track"><span class="bar-fill" style="display:block;width:${(a.equity / max * 100).toFixed(2)}%;background:${color(a.id)}"></span></span>
+      <span class="bar-val">${fmt(a.equity, 0)} ${cur}<small class="${cls(diff)}">(${diff > 0 ? '+' : ''}${fmt(diff, 0)})</small></span>
+    </div>`;
+  }).join('');
+  $('barsCap').textContent = L.barsCap(cur);
 }
 
 let dailyDate = null;
