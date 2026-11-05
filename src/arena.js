@@ -5,7 +5,7 @@ import {
   QuoteService, normalizeSymbol, marketOf, currencyOf, isIndex, isFund, isMarketOpen, marketDate, marketStatus, MARKET_NAMES, localParts,
 } from './market.js';
 import { handleMcp } from './mcp.js';
-import { agentDoc } from './agent-doc.js';
+import { agentDoc, pickLang } from './agent-doc.js';
 
 export const CURRENCIES = ['CNY', 'JPY'];
 export const CUR_NAMES = { CNY: '人民币', JPY: '日元' };
@@ -535,6 +535,9 @@ export class Arena extends DurableObject {
       allowedMarkets: s.allowedMarkets,
       rules: s.rules,
       competition: this.competitionStatus(),
+      tradingWindow: s.tradingWindow,
+      competitionStart: s.competitionStart,
+      competitionEnd: s.competitionEnd,
       dataSource: this.quotes.source,
       quoteError: this.quotes.lastError,
       markets: marketStatus(),
@@ -686,8 +689,10 @@ export class Arena extends DurableObject {
     try {
       if (req.method === 'OPTIONS') return new Response(null, { status: 204, headers: CORS });
       if (p === '/mcp') return await handleMcp(req, this);
-      if (p === '/agent.md' || p === '/llms.txt' || p === '/api/docs') {
-        return new Response(agentDoc(url.origin, this.settings, this.competitionStatus()), { headers: { ...CORS, 'content-type': 'text/markdown; charset=utf-8' } });
+      const docMatch = p.match(/^\/agent(?:\.(en|ja|zh))?\.md$/);
+      if (docMatch || p === '/llms.txt' || p === '/api/docs') {
+        const lang = pickLang(docMatch?.[1] || url.searchParams.get('lang'));
+        return new Response(agentDoc(url.origin, this.settings, this.competitionStatus(), lang), { headers: { ...CORS, 'content-type': 'text/markdown; charset=utf-8' } });
       }
       if (p === '/api/state' && req.method === 'GET') return json(await this.publicState());
       if (p === '/api/leaderboard' && req.method === 'GET') return json(await this.publicState({ detail: false }));
