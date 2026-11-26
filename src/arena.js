@@ -124,12 +124,20 @@ export class Arena extends DurableObject {
     return deepMerge(DEFAULT_SETTINGS, saved ? JSON.parse(saved) : {});
   }
 
+  /** 比赛已结束且最后一次估值已定格：此后不再拉行情，排名和资产都固定在定格那一刻 */
+  isFrozen() {
+    return this.competitionStatus().status === 'ended' && !!this.getMeta('frozenAt');
+  }
+
   // ---------------- 汇率 ----------------
   /** 返回每种货币折合计价货币的汇率，例如 { CNY: 1, JPY: 0.0471 }（计价货币为人民币时） */
   async rates() {
     let jpycny = null; // 1 日元 = ? 人民币
     let source = 'fallback';
-    if (this.settings.fxLive) {
+    if (this.isFrozen() && Number(this.getMeta('lastFx')) > 0) {
+      jpycny = Number(this.getMeta('lastFx'));
+      source = 'frozen';
+    } else if (this.settings.fxLive) {
       // 用“人民币兑日元”（约 21~24，有效数字多）再取倒数，比直接取“日元兑人民币”（只给到 0.042）精确得多
       const q = (await this.quotes.get(['fxCNYJPY'])).fxCNYJPY;
       if (q?.price > 0 && q.ageSec < 3600) {
@@ -345,6 +353,8 @@ export class Arena extends DurableObject {
   }
 
   async quotesFor(symbols) {
+    // 定格后不再拉行情：估值会退回到每只持仓最后记录的价格（positions.last_price）
+    if (this.isFrozen()) return {};
     const syms = [...new Set(symbols)];
     return syms.length ? this.quotes.get(syms) : {};
   }
@@ -478,7 +488,7 @@ export class Arena extends DurableObject {
   // ---------------- 行情（公开） ----------------
   async getQuotes(symbols) {
     const syms = [...new Set((symbols || []).map(normalizeSymbol).filter(Boolean))].slice(0, 100);
-    const [quotes, rates] = await Promise.all([this.quotes.get(syms), this.rates()]);
+    const [quotes, rates] = await Promise.all([this.isFrozen() ? {} : this.quotes.get(syms), this.rates()]);
     return { markets: marketStatus(), fx: { JPYCNY: rates.JPYCNY, CNYJPY: rates.CNYJPY, source: rates.source }, quotes };
   }
 
@@ -496,7 +506,7 @@ export class Arena extends DurableObject {
     for (const u of users) {
       const v = this.valuate(u, q, rates);
       const hist = this.sql.exec('SELECT t, v FROM equity WHERE user_id = ? ORDER BY t', u.id).toArray().map((r) => [r.t, r.v]);
-      hist.push([Date.now(), v.equity]);
+      hist.push([this.isFrozen() ? Number(this.getMeta('frozenAt')) : Date.now(), v.equity]);
       let peak = v.initialBase;
       let mdd = 0;
       for (const [, e] of hist) { peak = Math.max(peak, e); mdd = Math.max(mdd, (peak - e) / peak); }
@@ -550,6 +560,19 @@ export class Arena extends DurableObject {
 
   // ---------------- 定时任务：记录净值、每日结算 ----------------
   async alarm() {
+    // 比赛结束：先做最后一次估值并定格；之后不再拉行情，也不再重新排定时任务
+    if (this.competitionStatus().status === 'ended') {
+      if (!this.getMeta('frozenAt')) {
+        try {
+          await this.snapshot();
+          this.setMeta('frozenAt', String(Date.now()));
+        } catch (e) {
+          console.error('final snapshot failed', e);
+          await this.ctx.storage.setAlarm(Date.now() + 60_000); // 失败就一分钟后重试
+        }
+      }
+      return;
+    }
     try {
       const s = this.settings;
       const open = s.allowedMarkets.some((m) => isMarketOpen(m)) || this.quotes.source === 'mock';
@@ -631,6 +654,11 @@ export class Arena extends DurableObject {
     for (const c of Object.keys(next.initialCash)) if (!CURRENCIES.includes(c)) throw new HttpError(400, `不支持的货币 ${c}`);
     if (!CURRENCIES.includes(next.baseCurrency)) throw new HttpError(400, 'baseCurrency 只能是 CNY 或 JPY');
     this.settings = next;
+    // 结束时间被改回去（比赛重新开始）：解除定格，重新开始定时记录
+    if (this.competitionStatus().status !== 'ended' && this.getMeta('frozenAt')) {
+      this.setMeta('frozenAt', '');
+      this.ctx.storage.setAlarm(Date.now() + 5_000);
+    }
     const diff = {};
     for (const k of Object.keys(next)) if (JSON.stringify(next[k]) !== JSON.stringify(DEFAULT_SETTINGS[k])) diff[k] = next[k];
     this.setMeta('settings', JSON.stringify(diff));

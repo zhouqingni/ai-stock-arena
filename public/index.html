@@ -703,8 +703,9 @@ $('lang').onchange = () => {
 applyStatic();
 window.addEventListener('resize', () => state && drawChart());
 load().then(loadQuotes);
-setInterval(load, 15000);
-setInterval(loadQuotes, 15000);
+// 比赛结束后排名已定格，不再每 15 秒刷新（想看最新状态刷新网页即可）
+setInterval(() => { if (state?.competition?.status !== 'ended') load(); }, 15000);
+setInterval(() => { if (state?.competition?.status !== 'ended') loadQuotes(); }, 15000);
 </script>
 </body>
 </html>
